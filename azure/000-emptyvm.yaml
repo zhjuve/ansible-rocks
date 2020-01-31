@@ -1,0 +1,129 @@
+---
+- name: "Create Azure resources"
+  connection: local
+  hosts: all
+  vars_prompt:
+    - name: "location"
+      prompt: "Choose region to deploy VMs"
+      private: no
+      default: "westeurope"
+    - name: "project_prefix"
+      prompt: "Choose a prefix for all the resources"
+      private: no
+      default: "TstPrj"
+    - name: "instances_number"
+      prompt: "Choose a number of virtual machines to create"
+      private: no
+      default: 1
+    - name: "vm_size"
+      prompt: "Choose a size for azure virtual machines"
+      private: no
+      default: "Standard_B2s"
+    - name: "managed_disk_type"
+      prompt: "Choose a type for azure virtual disks"
+      private: no
+      default: "Standard_LRS"
+    - name: "admin_username"
+      prompt: "Choose an admin username"
+      private: no
+      default: "admin"
+    - name: "admin_pub_path"
+      prompt: "Where can I find the admin public key ?"
+      private: no
+      default: "~/.ssh/id_rsa.pub"
+    - name: "local_ip"
+      prompt: "your local IP address (skip if you don't want to add 22 port to NSG)"
+      private: no
+      default: "skip"
+    - name: "virtualnetwork_cidr"
+      prompt: "Give a network CIDR for virtual network (large)"
+      private: no
+      default: "100.64.0.0/10"
+    - name: "subnet_cidr"
+      prompt: "Give a subnet of that network"
+      private: no
+      default: "100.64.1.0/24"
+  vars:
+    - resourcegroup_name: "Alb-RG-{{location}}-{{project_prefix}}"
+    - availabilityset_name: "AS-{{project_prefix}}"
+    - virtualnetwork_name: "VN-{{project_prefix}}"
+    - subnet_name: "SB-{{project_prefix}}"
+    - securitygroup_name: "NS-{{project_prefix}}"
+    - vm_root_name: "VM{{project_prefix}}"
+    - public_ip_name: "PI-{{project_prefix}}-ip"
+    - nic_root_name: "VMNIC{{project_prefix}}-nic"
+  tasks:
+    - name: "Create Alb-RG-{{location}}-{{project_prefix}} Resource Group"
+      azure_rm_resourcegroup:
+        name: "{{resourcegroup_name}}"
+        location: "{{location}}"
+
+    - name: "Create AS-{{availabilityset_name}} Availability Set"
+      azure_rm_availabilityset:
+        name: "{{availabilityset_name}}"
+        location: "{{location}}"
+        resource_group: "{{resourcegroup_name}}"
+        sku: Aligned
+
+    - name: "Create VN-{{virtualnetwork_name}} Virtual Network"
+      azure_rm_virtualnetwork:
+        name: "{{virtualnetwork_name}}"
+        resource_group: "{{resourcegroup_name}}"
+        address_prefixes_cidr:
+          - "{{virtualnetwork_cidr}}"
+
+    - name: "create SB-{{subnet_name}} Subnet in VN-{{virtualnetwork_name}} for VMs"
+      azure_rm_subnet:
+        name: "{{subnet_name}}"
+        virtual_network_name: "{{virtualnetwork_name}}"
+        resource_group: "{{resourcegroup_name}}"
+        address_prefix_cidr: "{{subnet_cidr}}"
+      register: subnet
+
+    - name: "Create NS-{{securitygroup_name}} security rules (if local IP address was given)"
+      azure_rm_securitygroup:
+        name: "{{securitygroup_name}}"
+        resource_group: "{{resourcegroup_name}}"
+        purge_rules: yes
+        rules:
+          - name: 'AllowSSHFromYourOwnInternetIP'
+            protocol: 'Tcp'
+            source_address_prefix: "{{local_ip}}"
+            destination_port_range: 22
+            access: Allow
+            priority: 1000
+            direction: Inbound
+      when: local_ip | ipaddr
+
+    - name: "Create a {{nic_root_name}}X network interface for each VM"
+      azure_rm_networkinterface:
+        name: "{{nic_root_name}}{{item}}"
+        resource_group: "{{resourcegroup_name}}"
+        virtual_network: "{{virtualnetwork_name}}"
+        subnet_name: "{{subnet_name}}"
+        security_group: "{{securitygroup_name}}"
+        ip_configurations:
+          - name: "ipconfig"
+            public_ip_address_name: "{{public_ip_name}}{{item}}"
+            primary: True
+      with_sequence: count="{{instances_number}}"
+
+    - name: "Create {{vm_root_name}}X VM with existing NIC"
+      azure_rm_virtualmachine:
+        resource_group: "{{resourcegroup_name}}"
+        name: "{{vm_root_name}}{{item}}"
+        vm_size: "{{vm_size}}"
+        managed_disk_type: "{{managed_disk_type}}"
+        admin_username: "{{admin_username}}"
+        availability_set: "{{availabilityset_name}}"
+        ssh_password_enabled: false
+        ssh_public_keys:
+          - path: "/home/{{admin_username}}/.ssh/authorized_keys"
+            key_data: "{{lookup('file', '{{admin_pub_path}}') }}"
+        network_interface_names: "{{nic_root_name}}{{item}}"
+        image:
+          offer: UbuntuServer
+          publisher: Canonical
+          sku: '16.04.0-LTS'
+          version: latest
+      with_sequence: count="{{instances_number}}"
