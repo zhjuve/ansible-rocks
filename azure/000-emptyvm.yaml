@@ -26,7 +26,7 @@
     - name: "admin_username"
       prompt: "Choose an admin username"
       private: no
-      default: "admin"
+      default: "zhjuve"
     - name: "admin_pub_path"
       prompt: "Where can I find the admin public key ?"
       private: no
