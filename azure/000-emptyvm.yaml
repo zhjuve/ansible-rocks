@@ -58,21 +58,21 @@
         name: "{{resourcegroup_name}}"
         location: "{{location}}"
 
-    - name: "Create AS-{{availabilityset_name}} Availability Set"
+    - name: "Create {availabilityset_name}} Availability Set"
       azure_rm_availabilityset:
         name: "{{availabilityset_name}}"
         location: "{{location}}"
         resource_group: "{{resourcegroup_name}}"
         sku: Aligned
 
-    - name: "Create VN-{{virtualnetwork_name}} Virtual Network"
+    - name: "Create {{virtualnetwork_name}} Virtual Network"
       azure_rm_virtualnetwork:
         name: "{{virtualnetwork_name}}"
         resource_group: "{{resourcegroup_name}}"
         address_prefixes_cidr:
           - "{{virtualnetwork_cidr}}"
 
-    - name: "create SB-{{subnet_name}} Subnet in VN-{{virtualnetwork_name}} for VMs"
+    - name: "create {{subnet_name}} Subnet in {{virtualnetwork_name}} for VMs"
       azure_rm_subnet:
         name: "{{subnet_name}}"
         virtual_network_name: "{{virtualnetwork_name}}"
@@ -80,7 +80,7 @@
         address_prefix_cidr: "{{subnet_cidr}}"
       register: subnet
 
-    - name: "Create NS-{{securitygroup_name}} security rules (if local IP address was given)"
+    - name: "Create {{securitygroup_name}} security rules (if local IP address was given)"
       azure_rm_securitygroup:
         name: "{{securitygroup_name}}"
         resource_group: "{{resourcegroup_name}}"
